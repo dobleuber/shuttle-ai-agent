@@ -7,12 +7,14 @@ use async_openai::{config::OpenAIConfig, Client as OpenAIClient};
 use reqwest::header::HeaderMap;
 use serde_json::Value;
 use std::env;
+use async_trait::async_trait;
 
-
-pub trait Agent {
+#[async_trait]
+pub trait Agent: Send + Sync {
     fn name(&self) -> String;
     fn client(&self) -> OpenAIClient<OpenAIConfig>;
     fn system_prompt(&self) -> String;
+    fn clone_box(&self) -> Box<dyn Agent>;
 
     async fn prompt(&self, input: &str, data: String) -> Result<String, ApiError> {
         let input = format!(
@@ -46,9 +48,7 @@ pub trait Agent {
                     .build()?,
             )
             .await
-            .map(|res|
-                res.choices[0].message.content.clone().unwrap()
-            )?;
+            .map(|res| res.choices[0].message.content.clone().unwrap())?;
 
         println!("Retrieved result from prompt: {}", res);
 
@@ -60,7 +60,7 @@ pub trait Agent {
 pub struct Researcher {
     http_client: reqwest::Client,
     system: Option<String>,
-    openai_client: OpenAIClient<OpenAIConfig>
+    openai_client: OpenAIClient<OpenAIConfig>,
 }
 
 impl Agent for Researcher {
@@ -88,6 +88,10 @@ impl Agent for Researcher {
         ".to_string()
         }
     }
+
+    fn clone_box(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
 }
 
 impl Researcher {
@@ -95,8 +99,13 @@ impl Researcher {
         let openai_client = OpenAIClient::new();
 
         let mut headers = HeaderMap::new();
-        headers.insert("X-Api-Key", env::var("SERPER_API_KEY")
-            .expect("SERPER_API_KEY must be set").parse().unwrap());
+        headers.insert(
+            "X-Api-Key",
+            env::var("SERPER_API_KEY")
+                .expect("SERPER_API_KEY must be set")
+                .parse()
+                .unwrap(),
+        );
         headers.insert("Content-Type", "application/json".parse().unwrap());
 
         let http_client = reqwest::Client::builder()
@@ -107,7 +116,7 @@ impl Researcher {
         Researcher {
             http_client,
             system: None,
-            openai_client
+            openai_client,
         }
     }
 
@@ -133,7 +142,7 @@ impl Researcher {
 #[derive(Clone)]
 pub struct Writer {
     system: Option<String>,
-    client: OpenAIClient<OpenAIConfig>
+    client: OpenAIClient<OpenAIConfig>,
 }
 
 impl Writer {
@@ -141,7 +150,7 @@ impl Writer {
         let client = OpenAIClient::new();
         Writer {
             system: None,
-            client
+            client,
         }
     }
 }
@@ -174,5 +183,107 @@ impl Agent for Writer {
 "
         .to_string()
         }
+    }
+
+    fn clone_box(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct TwitterAgent {
+    system: Option<String>,
+    client: OpenAIClient<OpenAIConfig>,
+}
+
+impl TwitterAgent {
+    pub fn new() -> Self {
+        let client = OpenAIClient::new();
+        TwitterAgent {
+            system: None,
+            client,
+        }
+    }
+}
+
+impl Agent for TwitterAgent {
+    fn name(&self) -> String {
+        String::from("twitter")
+    }
+
+    fn client(&self) -> OpenAIClient<OpenAIConfig> {
+        self.client.clone()
+    }
+
+    fn system_prompt(&self) -> String {
+        self.system.clone().unwrap_or_else(|| String::from(
+            "You are a social media agent specializing in Twitter content creation.
+
+            Your job is to craft high-quality Twitter posts that are engaging, concise, and tailored for virality. 
+            The content should reflect a personal tone, avoid AI-written patterns, and adhere to Twitter's character limit.
+
+            When crafting each post:
+            - Hook the reader in the first sentence (e.g., surprising fact, bold statement, or question)
+            - Deliver the main point or insight concisely
+            - Include a follow-up action, like engagement prompts (e.g., 'Share your thoughts,' 'RT if you agree')
+            - Make use of hashtags, emojis, or a storytelling structure to boost engagement when appropriate
+            - Ensure the tone is conversational, witty, or thought-provoking, depending on the context
+
+            The content must be SEO-aware without appearing overly optimized. Avoid stuffing keywords unnaturally."
+        ))
+    }
+
+    fn clone_box(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Clone)]
+pub struct LinkedInAgent {
+    system: Option<String>,
+    client: OpenAIClient<OpenAIConfig>,
+}
+
+impl LinkedInAgent {
+    pub fn new() -> Self {
+        let client = OpenAIClient::new();
+        LinkedInAgent {
+            system: None,
+            client,
+        }
+    }
+}
+
+impl Agent for LinkedInAgent {
+    fn name(&self) -> String {
+        String::from("linkedin")
+    }
+
+    fn client(&self) -> OpenAIClient<OpenAIConfig> {
+        self.client.clone()
+    }
+
+    fn system_prompt(&self) -> String {
+        self.system.clone().unwrap_or_else(|| String::from(
+            "You are a professional networking agent specializing in LinkedIn content creation.
+
+            Your task is to write LinkedIn posts that are insightful, engaging, and suitable for a professional audience 
+            while maintaining a human tone.
+
+            When writing each LinkedIn post:
+            - Start with a strong opening (e.g., a thought-provoking question, a bold statement, or an anecdote)
+            - Clearly communicate the main idea or insight while providing context
+            - Include actionable advice or a follow-up point to inspire engagement, reflection, or discussion
+            - Explain the 'why' behind the advice, connecting it to professional or personal development
+            - Maintain a professional, thoughtful tone with a touch of authenticity
+            - Add a strong call-to-action: invite comments, share experiences, or encourage reposts
+
+            Structure the content in short, scannable paragraphs. Break ideas into clear sections for readability.
+            The content must align with LinkedIn's audience: professionals seeking value, insights, and connection."
+        ))
+    }
+
+    fn clone_box(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
     }
 }

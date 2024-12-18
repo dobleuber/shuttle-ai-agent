@@ -2152,6 +2152,7 @@ name = "shuttle-ai-agent"
 version = "0.1.0"
 dependencies = [
  "async-openai",
+ "async-trait",
  "axum 0.7.9",
  "reqwest 0.12.9",
  "serde",

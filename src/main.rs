@@ -9,12 +9,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 mod agent;
+mod errors;
+mod pipeline;
 mod state;
-use agent::Agent;
+use agent::{Agent, LinkedInAgent, Researcher, TwitterAgent, Writer};
+use pipeline::{ContentPipeline, Pipeline};
 use shuttle_runtime::SecretStore;
 use state::AppState;
-
-mod errors;
 
 async fn hello_world() -> &'static str {
     "Hola mundo!"
@@ -27,12 +28,17 @@ pub struct Prompt {
 
 #[axum::debug_handler]
 async fn prompt(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(prompt): Json<Prompt>,
 ) -> Result<Json<String>, ApiError> {
-    let res = state.researcher.prepare_data(&prompt.q).await?;
-    let res = state.researcher.prompt(&prompt.q, res).await?;
-    let res = state.writer.prompt(&prompt.q, res).await?;
+    let agents: Vec<Box<dyn Agent>> = vec![
+        Box::new(Researcher::new()),
+        // Box::new(Writer::new()),
+        Box::new(TwitterAgent::new()),
+        Box::new(LinkedInAgent::new()),
+    ];
+    let pipeline = ContentPipeline::new(agents);
+    let res = pipeline.run_pipeline(&prompt.q).await?;
 
     Ok(Json(res))
 }

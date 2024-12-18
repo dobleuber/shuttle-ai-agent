@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-openai = "0.26.0"
+async-trait = "0.1.77"
 axum = { version = "0.7.4", features = ["macros"] }
 reqwest = { version = "0.12.9", features = ["json"] }
 serde = { version = "1.0.216", features = ["derive"] }
